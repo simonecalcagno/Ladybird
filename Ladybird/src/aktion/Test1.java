@@ -1,12 +1,7 @@
 package aktion;
 
-import lejos.hardware.ev3.EV3;
-import lejos.hardware.BrickFinder;
-import lejos.hardware.Keys;
-import lejos.hardware.lcd.TextLCD;
 
-
-public class Test {
+public class Test1 {
 
 	public static void main(String[] args) {
 		//EV3-Stein suchen&finden
