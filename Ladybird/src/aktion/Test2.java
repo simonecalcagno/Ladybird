@@ -1,5 +1,12 @@
 package aktion;
 
+import lejos.hardware.BrickFinder;
+import lejos.hardware.Keys;
+import lejos.hardware.ev3.EV3;
+import lejos.hardware.lcd.LCD;
+import lejos.hardware.motor.EV3LargeRegulatedMotor;
+import lejos.hardware.port.MotorPort;
+
 public class Test2 {
 	
 	public static void main(String[] args){
