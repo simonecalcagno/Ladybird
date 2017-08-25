@@ -9,6 +9,8 @@ import lejos.hardware.lcd.TextLCD;
 import lejos.hardware.motor.EV3LargeRegulatedMotor;
 import lejos.hardware.port.MotorPort;
 import lejos.hardware.port.Port;
+import lejos.hardware.port.SensorPort;
+import lejos.hardware.sensor.EV3ColorSensor;
 import lejos.hardware.sensor.EV3UltrasonicSensor;
 import lejos.robotics.SampleProvider;
 
@@ -24,11 +26,17 @@ public class Action{
 	public static Port portS4 = ev3brick.getPort("S4");
 	public static EV3UltrasonicSensor sonicSensor = new EV3UltrasonicSensor(portS4);
 
+	public static EV3ColorSensor colorSense = new EV3ColorSensor(SensorPort.S1);
+
 	public static volatile boolean objectDetected = false;
+	public static volatile boolean ladybirdDetected = false;
 	public static MoveThread moveThread;
 	public static DetectThread detectThread;
+	public static LadybirdThread ladybirdThread;
 	public static int mThreadCount = 0;
 	public static int dThreadCount = 0;
+	public static int lThreadCount = 0;
+	public static int search = 3;
 
 	public static void main(String[] args){
 
@@ -36,14 +44,16 @@ public class Action{
 			if(dThreadCount==0){
 				detectThread = new DetectThread();
 				detectThread.start();
-				dThreadCount++;
+			}
+			if(lThreadCount==0){
+				ladybirdThread = new LadybirdThread();
+				ladybirdThread.start();
+
 			}
 			if(mThreadCount==0){
 				moveThread = new MoveThread();
 				moveThread.start();
-				mThreadCount++;
 			}
-			
 		}
 	}
 }
@@ -52,50 +62,72 @@ public class Action{
 
 class MoveThread extends Thread{
 	public void run() {
-		Action.lcddisplay.drawString("MoveThread gestartet", 0, 5);
-		while(Action.objectDetected == false){
+		Action.mThreadCount++;
+		while(Action.ladybirdDetected == false && Action.objectDetected == false){
 			Action.LEFT_MOTOR.forward();
 			Action.RIGHT_MOTOR.forward();
 		}
-		//		if(Bewegung.objectDetected){
-		//			LEFT_MOTOR.stop();
-		//			RIGHT_MOTOR.stop();
 
-		Action.LEFT_MOTOR.stop();
-		Action.RIGHT_MOTOR.rotateTo(360);
-		Action.RIGHT_MOTOR.stop();
+		if(Action.objectDetected){
+			Action.LEFT_MOTOR.stop();
+			Action.RIGHT_MOTOR.stop();
+			Action.RIGHT_MOTOR.rotateTo(360);
+			Action.RIGHT_MOTOR.stop();
+		}if(Action.ladybirdDetected){
+			Action.LEFT_MOTOR.stop();
+			Action.RIGHT_MOTOR.stop();
+			Action.buttons.waitForAnyPress();
+			Action.ladybirdDetected = false;
+		}
 		Action.mThreadCount = 0;
-		Action.lcddisplay.clear();
-		Action.lcddisplay.drawInt(Action.mThreadCount,1,1);
-		
 	}
-
 }
 
 //------------------------------------------------------------------------
 
 class DetectThread extends Thread{
 	public void run() {
-
+		Action.dThreadCount++;
 		SampleProvider sonicdistance = Action.sonicSensor.getDistanceMode();
 		float[] sampleUltraSonic = new float[sonicdistance.sampleSize()];
-		Action.lcddisplay.drawString("DetectThread gestartet", 0, 0);
 
 		while(Action.objectDetected == false){
 			sonicdistance.fetchSample(sampleUltraSonic,0);
 
-			if(sampleUltraSonic[0] < 2.5){
+			if(sampleUltraSonic[0] < 0.1){
 				Action.objectDetected = true;
 
 			}else{
 				Action.objectDetected = false;
 			}
 		}
+		try {
+			Thread.sleep(2000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		Action.objectDetected = false;
 		Action.dThreadCount = 0;
-		Action.lcddisplay.drawString("det"+String.valueOf(Action.dThreadCount), 1, 1);
 	}
 
 }
 
 
+//-------------------------------------------------------------------------
+class LadybirdThread extends Thread{
+	public void run(){
+		Action.lThreadCount++;
+		Action.colorSense.setFloodlight(false);
+
+		while(Action.ladybirdDetected==false){
+			int found = Action.colorSense.getColorID();
+
+			if(found==Action.search){
+				Action.ladybirdDetected = true;
+				Action.lcddisplay.drawString("Ladybird detected",0,0);
+			}
+		}
+		Action.lThreadCount = 0;
+	}
+}
 
