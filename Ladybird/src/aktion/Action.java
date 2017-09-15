@@ -1,8 +1,11 @@
 package aktion;
 
+import java.io.File;
+
 import lejos.hardware.BrickFinder;
 import lejos.hardware.Button;
 import lejos.hardware.Keys;
+import lejos.hardware.Sound;
 import lejos.hardware.ev3.EV3;
 import lejos.hardware.lcd.LCD;
 import lejos.hardware.lcd.TextLCD;
@@ -15,44 +18,71 @@ import lejos.hardware.sensor.EV3UltrasonicSensor;
 import lejos.robotics.SampleProvider;
 
 public class Action{
+	
+	public static EV3 ev3brick = (EV3) BrickFinder.getLocal();
+	public static TextLCD lcddisplay = ev3brick.getTextLCD();
+	public static Keys buttons = ev3brick.getKeys();
+	
+	public static File screamFile = new File("ScreamSound.wav");
+	public static File oopsFile = new File("OopsSound.wav");
 
 	public static EV3LargeRegulatedMotor LEFT_MOTOR = new EV3LargeRegulatedMotor(MotorPort.B);
 	public static EV3LargeRegulatedMotor RIGHT_MOTOR = new EV3LargeRegulatedMotor(MotorPort.C);
 
-	public static EV3 ev3brick = (EV3) BrickFinder.getLocal();
-	public static TextLCD lcddisplay = ev3brick.getTextLCD();
-	public static Keys buttons = ev3brick.getKeys();
-
-	public static Port portS4 = ev3brick.getPort("S4");
-	public static EV3UltrasonicSensor sonicSensor = new EV3UltrasonicSensor(portS4);
-
+	public static EV3UltrasonicSensor sonicSensor = new EV3UltrasonicSensor(SensorPort.S4);
 	public static EV3ColorSensor colorSense = new EV3ColorSensor(SensorPort.S1);
 
 	public static volatile boolean objectDetected = false;
 	public static volatile boolean ladybirdDetected = false;
-	public static MoveThread moveThread;
-	public static DetectThread detectThread;
-	public static LadybirdThread ladybirdThread;
-	public static int mThreadCount = 0;
-	public static int dThreadCount = 0;
-	public static int lThreadCount = 0;
-	public static int search = 3;
+	
+	public MoveThread moveThread;
+	public DetectThread detectThread;
+	public LadybirdThread ladybirdThread;
+	
+	public static volatile int mThreadCount = 0;
+	public static volatile int dThreadCount = 0;
+	public static volatile int lThreadCount = 0;
+
+	public static final int COLOR_SEARCH = 0;
 
 	public static void main(String[] args){
 
-		while(buttons.getButtons() != Keys.ID_ESCAPE){
+		while(Action.buttons.getButtons() != Keys.ID_ESCAPE){
 			if(dThreadCount==0){
-				detectThread = new DetectThread();
+				DetectThread detectThread = new DetectThread();
+				dThreadCount++;
 				detectThread.start();
 			}
 			if(lThreadCount==0){
-				ladybirdThread = new LadybirdThread();
+				LadybirdThread ladybirdThread = new LadybirdThread();
+				lThreadCount++;
 				ladybirdThread.start();
-
 			}
 			if(mThreadCount==0){
-				moveThread = new MoveThread();
+				MoveThread moveThread = new MoveThread();
+				mThreadCount++;
 				moveThread.start();
+			}
+			
+			if(ladybirdDetected){
+				RIGHT_MOTOR.stop();
+				LEFT_MOTOR.stop();
+				lcddisplay.drawString("Ladybird detected",0,0);
+				Sound.playSample(screamFile,100);
+				buttons.waitForAnyPress();
+				ladybirdDetected = false;
+				lcddisplay.clear();
+				mThreadCount = 0;
+				lThreadCount = 0;
+			}if(objectDetected){
+				Action.RIGHT_MOTOR.stop();
+				Action.LEFT_MOTOR.stop();
+				Sound.playSample(Action.oopsFile,100);
+				Action.LEFT_MOTOR.rotate(360);
+				Action.LEFT_MOTOR.stop();
+				objectDetected = false;
+				mThreadCount=0;
+				dThreadCount = 0;
 			}
 		}
 	}
@@ -62,24 +92,10 @@ public class Action{
 
 class MoveThread extends Thread{
 	public void run() {
-		Action.mThreadCount++;
-		while(Action.ladybirdDetected == false && Action.objectDetected == false){
+		while(!Action.objectDetected && !Action.ladybirdDetected){
 			Action.LEFT_MOTOR.forward();
 			Action.RIGHT_MOTOR.forward();
 		}
-
-		if(Action.objectDetected){
-			Action.LEFT_MOTOR.stop();
-			Action.RIGHT_MOTOR.stop();
-			Action.RIGHT_MOTOR.rotateTo(360);
-			Action.RIGHT_MOTOR.stop();
-		}if(Action.ladybirdDetected){
-			Action.LEFT_MOTOR.stop();
-			Action.RIGHT_MOTOR.stop();
-			Action.buttons.waitForAnyPress();
-			Action.ladybirdDetected = false;
-		}
-		Action.mThreadCount = 0;
 	}
 }
 
@@ -87,27 +103,19 @@ class MoveThread extends Thread{
 
 class DetectThread extends Thread{
 	public void run() {
-		Action.dThreadCount++;
 		SampleProvider sonicdistance = Action.sonicSensor.getDistanceMode();
 		float[] sampleUltraSonic = new float[sonicdistance.sampleSize()];
 
-		while(Action.objectDetected == false){
+		while(!Action.objectDetected){
 			sonicdistance.fetchSample(sampleUltraSonic,0);
 
 			if(sampleUltraSonic[0] < 0.1){
 				Action.objectDetected = true;
-
-			}else{
-				Action.objectDetected = false;
+				Thread.currentThread().interrupt();
 			}
+
 		}
-		try {
-			Thread.sleep(2000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		Action.objectDetected = false;
-		Action.dThreadCount = 0;
+
 	}
 
 }
@@ -116,18 +124,15 @@ class DetectThread extends Thread{
 //-------------------------------------------------------------------------
 class LadybirdThread extends Thread{
 	public void run(){
-		Action.lThreadCount++;
 		Action.colorSense.setFloodlight(false);
 
-		while(Action.ladybirdDetected==false){
+		while(!Action.ladybirdDetected){
 			int found = Action.colorSense.getColorID();
 
-			if(found==Action.search){
-				Action.ladybirdDetected = true;
-				Action.lcddisplay.drawString("Ladybird detected",0,0);
+			if(found==Action.COLOR_SEARCH){
+				Action.ladybirdDetected = true;			
 			}
-		}
-		Action.lThreadCount = 0;
+		}		
 	}
 }
 
